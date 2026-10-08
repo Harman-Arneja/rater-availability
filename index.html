@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="robots" content="noindex,nofollow">
+<meta name="color-scheme" content="light dark">
+<title>Weekly availability</title>
+<style>
+/* One narrow column. Cool neutrals, green for available, system fonts so the page loads instantly. */
+:root{
+  --bg:#F3F5F7;--sf:#FFFFFF;--sf2:#E9EDF1;--ink:#16212B;--mut:#5B6B79;--line:#D5DCE3;
+  --ok:#1B8A5E;--ok-bg:#DDF3E8;--no:#C23B3A;--no-bg:#FBE4E3;--ac:#2F5BD8;--on:#FFFFFF;
+  --fb:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+}
+@media (prefers-color-scheme:dark){
+  :root{--bg:#0F161C;--sf:#17212A;--sf2:#1F2C37;--ink:#E8EEF3;--mut:#9AABB8;--line:#2C3B48;
+    --ok:#4CC38F;--ok-bg:#15382A;--no:#F07A78;--no-bg:#3C1F20;--ac:#8FA9FF;--on:#0F161C}
+}
+*,*::before,*::after{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 var(--fb);padding:max(16px,env(safe-area-inset-top)) 16px max(24px,env(safe-area-inset-bottom))}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--ac);outline-offset:2px}
+.wrap{max-width:440px;margin:0 auto}
+.card{background:var(--sf);border:1px solid var(--line);border-radius:16px;padding:18px}
+.top{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:16px}
+h1{font-size:22px;line-height:1.2;margin:0}
+.wk{font-size:14px;color:var(--mut);white-space:nowrap}
+.lbl{font-size:14px;font-weight:600;color:var(--mut);margin:0 0 8px}
+.seg{display:flex;gap:6px;margin-bottom:18px}
+.seg button{flex:1;height:48px;border-radius:12px;border:1px solid var(--line);background:var(--sf);font-weight:600}
+.seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.days{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;margin-bottom:10px}
+.days button{height:64px;border-radius:12px;border:1px solid var(--line);background:var(--sf);color:var(--mut);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-weight:700;font-size:17px}
+.days button small{font-size:12px;font-weight:500}
+.days button[aria-pressed="true"]{background:var(--ok-bg);border-color:var(--ok);color:var(--ok)}
+.days button[disabled]{opacity:.4}
+.quick{display:flex;gap:16px;margin-bottom:16px}
+.quick button{border:0;background:none;padding:6px 0;color:var(--ac);font-size:14px;text-decoration:underline}
+.na{display:flex;align-items:center;gap:12px;min-height:48px;padding:0 4px;margin-bottom:12px}
+.na input{width:22px;height:22px;margin:0;accent-color:var(--ink)}
+.go{width:100%;height:52px;border:0;border-radius:12px;background:var(--ink);color:var(--bg);font-weight:700;font-size:17px}
+.go[disabled]{opacity:.6;cursor:default}
+.nl{display:block;font-size:13px;color:var(--mut);margin:0 0 6px}
+textarea#note{width:100%;box-sizing:border-box;resize:none;margin-bottom:14px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--sf);color:var(--ink);font:inherit;font-size:16px}
+.note{border-radius:10px;padding:12px 14px;margin-top:12px;font-size:15px}
+.note.ok{background:var(--ok-bg);color:var(--ok)}
+.note.er{background:var(--no-bg);color:var(--no)}
+.note.ld{background:var(--sf2);color:var(--mut)}
+.note b{display:block}
+.note button{margin-top:8px;height:40px;padding:0 16px;border-radius:10px;border:1px solid currentColor;background:transparent;font-weight:600}
+.note a{color:inherit}
+.fine{font-size:13px;color:var(--mut);margin:16px 0 0;line-height:1.5}
+.demo{background:var(--sf2);color:var(--mut);border-radius:10px;padding:8px 12px;font-size:13px;margin-bottom:12px}
+.center{text-align:center;padding:28px 18px}
+.center h1{margin-bottom:8px}
+.center p{margin:0 0 4px;color:var(--mut)}
+.spin{width:28px;height:28px;border-radius:50%;border:3px solid var(--line);border-top-color:var(--ink);margin:0 auto 12px;animation:sp .8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.spin{animation:none}}
+</style>
+</head>
+<body>
+<main class="wrap" id="app" aria-live="polite"></main>
+<noscript><p style="max-width:440px;margin:24px auto">This page needs JavaScript. Please open it in your phone or computer browser.</p></noscript>
+<script>
+(function () {
+  'use strict';
+
+  /* Set these two values once, after the Apps Script web app is deployed. */
+  var CONFIG = {
+    API_URL: '',          // Apps Script web app URL ending in /exec. While empty, the page runs in demo mode and saves nothing.
+    BACKUP_FORM_URL: ''   // Optional Google Form link shown if the page cannot save.
+  };
+
+  var DN = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+  var DL = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+  var MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  var app = document.getElementById('app');
+  var params = new URLSearchParams(location.search);
+  var token = params.get('t') || '';
+  var demo = !CONFIG.API_URL;
+  var S = { p: null, tz: 'IST', days: [0, 0, 0, 0, 0, 0, 0], na: false, note: '', status: 'idle' };
+
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
+  function istMonday() {
+    var d = new Date(Date.now() + 19800000), dow = (d.getUTCDay() + 6) % 7;
+    return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate() - dow));
+  }
+  function parseStart(iso) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso || '');
+    return m ? new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])) : istMonday();
+  }
+  function dayDate(i) { return new Date(parseStart(S.p && S.p.start).getTime() + i * 864e5); }
+  function weekLabel() {
+    var a = dayDate(0), b = dayDate(6);
+    return a.getUTCDate() + ' ' + MON[a.getUTCMonth()] + ' – ' + b.getUTCDate() + ' ' + MON[b.getUTCMonth()];
+  }
+  function count() { return S.days.reduce(function (a, b) { return a + b; }, 0); }
+
+  function request(method, url, body) {
+    var ctl = new AbortController();
+    var t = setTimeout(function () { ctl.abort(); }, 15000);
+    return fetch(url, { method: method, body: body, headers: body ? { 'Content-Type': 'text/plain;charset=utf-8' } : undefined, signal: ctl.signal })
+      .then(function (r) { clearTimeout(t); if (!r.ok) throw new Error('http'); return r.json(); },
+            function (e) { clearTimeout(t); throw e; });
+  }
+  function fake(v, ms, canFail) {
+    return new Promise(function (res, rej) {
+      setTimeout(function () { if (canFail && params.get('sim') === 'fail') rej(new Error('offline')); else res(v); }, ms);
+    });
+  }
+
+  function screen(title, text, extra) {
+    app.innerHTML = '<div class="card center">' + (extra === 'spin' ? '<div class="spin" aria-hidden="true"></div>' : '') +
+      '<h1>' + esc(title) + '</h1>' + (text ? '<p>' + esc(text) + '</p>' : '') +
+      (extra === 'retry' ? '<p style="margin-top:14px"><button class="go" data-a="reload" style="max-width:220px">Try again</button></p>' : '') + '</div>';
+  }
+
+  function load() {
+    screen('Loading your page…', '', 'spin');
+    if (demo) {
+      fake({ ok: true, name: 'Aarav Sharma', tz: 'IST', days: [1, 1, 1, 1, 1, 0, 0], open: true }, 300).then(start);
+      return;
+    }
+    if (!token) { screen('This link is incomplete', 'Open the button in your email again. If it still does not work, ask your PQL for a new link.'); return; }
+    request('GET', CONFIG.API_URL + '?action=profile&t=' + encodeURIComponent(token))
+      .then(function (p) {
+        if (!p || !p.ok) { screen('This link is not valid', 'Ask your PQL for a new link.'); return; }
+        start(p);
+      })
+      .catch(function () { screen('Could not load your page', 'Check your connection and try again.', 'retry'); });
+  }
+
+  function start(p) {
+    S.p = p; S.tz = p.tz === 'PST' ? 'PST' : 'IST'; S.na = !!p.na; S.note = String(p.note || '').slice(0, 200);
+    S.days = (p.days || []).slice(0, 7).map(function (v) { return v === 1 ? 1 : 0; });
+    while (S.days.length < 7) S.days.push(0);
+    S.status = 'idle';
+    if (p.open === false) { screen('This week is closed', 'Next week’s request arrives on Monday.'); return; }
+    build();
+  }
+
+  function build() {
+    var first = esc(String(S.p.name || 'there').split(' ')[0]);
+    var days = '';
+    for (var i = 0; i < 7; i++) {
+      days += '<button type="button" data-a="day" data-i="' + i + '" aria-pressed="false" aria-label="' + DN[i] + ' ' + dayDate(i).getUTCDate() + '">' + DL[i] + '<small>' + dayDate(i).getUTCDate() + '</small></button>';
+    }
+    app.innerHTML = (demo ? '<div class="demo">Demo mode. Nothing you tap here is saved.</div>' : '') +
+      '<div class="card"><div class="top"><h1>Hi ' + first + '</h1><span class="wk">' + weekLabel() + '</span></div>' +
+      '<p class="lbl" id="tzl">Working timezone</p><div class="seg" role="group" aria-labelledby="tzl">' +
+      '<button type="button" data-a="tz" data-v="IST" aria-pressed="false">IST</button><button type="button" data-a="tz" data-v="PST" aria-pressed="false">PST</button></div>' +
+      '<p class="lbl" id="dyl">Days you are available</p><div class="days" role="group" aria-labelledby="dyl">' + days + '</div>' +
+      '<div class="quick"><button type="button" data-a="q" data-v="wk">Weekdays</button><button type="button" data-a="q" data-v="all">All days</button><button type="button" data-a="q" data-v="none">Clear</button></div>' +
+      '<label class="na"><input type="checkbox" id="na"> Not available this week</label>' +
+      '<label class="nl" for="note">Note (optional)</label><textarea id="note" maxlength="200" rows="2" placeholder="e.g. Out Wed afternoon, can cover Sat"></textarea>' +
+      '<button type="button" class="go" id="go" data-a="submit">Submit availability</button><div id="msg"></div>' +
+      '<p class="fine">A response is required every week, even if you are unavailable. Raters who do not respond for three weeks in a row are marked inactive and may be removed from the project.</p></div>';
+    var nt = document.getElementById('note'); if (nt) nt.value = S.note;
+    paint();
+  }
+
+  function paint() {
+    var btns = app.querySelectorAll('[data-a="day"]');
+    for (var i = 0; i < btns.length; i++) {
+      btns[i].setAttribute('aria-pressed', String(!S.na && S.days[i] === 1));
+      btns[i].disabled = S.na;
+    }
+    var tz = app.querySelectorAll('[data-a="tz"]');
+    for (var j = 0; j < tz.length; j++) tz[j].setAttribute('aria-pressed', String(tz[j].dataset.v === S.tz));
+    var na = document.getElementById('na'); if (na) na.checked = S.na;
+    var go = document.getElementById('go'), msg = document.getElementById('msg'), h = '';
+    if (!go) return;
+    go.disabled = S.status === 'saving';
+    go.textContent = S.status === 'saving' ? 'Saving…' : (S.status === 'saved' ? 'Update availability' : 'Submit availability');
+    if (S.status === 'saving') h = '<div class="note ld">Saving your answers…</div>';
+    else if (S.status === 'invalid') h = '<div class="note er" role="alert">Select at least one day, or tick Not available this week.</div>';
+    else if (S.status === 'saved') {
+      var names = [];
+      S.days.forEach(function (v, k) { if (v) names.push(DN[k].slice(0, 3)); });
+      h = '<div class="note ok"><b>Saved</b>' + (S.na ? 'You are marked unavailable this week.' : esc(names.join(', ')) + ' in ' + S.tz + '.') +
+        '<br>You can open the link again to change this until Thursday 9:00 AM IST.</div>';
+    } else if (S.status === 'error') {
+      h = '<div class="note er" role="alert"><b>Could not save</b>Your answers are still here. Check your connection and try again.<br>' +
+        '<button type="button" data-a="submit">Try again</button>' +
+        (CONFIG.BACKUP_FORM_URL ? '<br><a href="' + esc(CONFIG.BACKUP_FORM_URL) + '">Use the backup form instead</a>' : '') + '</div>';
+    }
+    msg.innerHTML = h;
+  }
+
+  function submit() {
+    if (S.status === 'saving') return;
+    if (!S.na && count() === 0) { S.status = 'invalid'; paint(); return; }
+    S.status = 'saving'; paint();
+    var payload = { action: 'submit', t: token, tz: S.tz, note: S.note, days: S.na ? [0, 0, 0, 0, 0, 0, 0] : S.days, na: S.na };
+    var job = demo ? fake({ ok: true }, 700, true) : request('POST', CONFIG.API_URL, JSON.stringify(payload));
+    job.then(function (r) {
+      if (r && r.ok) { S.status = 'saved'; paint(); }
+      else if (r && r.error === 'closed') { screen('This week is closed', 'Next week’s request arrives on Monday.'); }
+      else throw new Error('failed');
+    }).catch(function () { S.status = 'error'; paint(); });
+  }
+
+  app.addEventListener('click', function (e) {
+    var t = e.target.closest('[data-a]'); if (!t) return;
+    var a = t.dataset.a;
+    if (a === 'day') { var i = +t.dataset.i; S.days[i] = S.days[i] ? 0 : 1; S.status = 'idle'; paint(); }
+    else if (a === 'tz') { S.tz = t.dataset.v; S.status = 'idle'; paint(); }
+    else if (a === 'q') {
+      var v = t.dataset.v; S.days = [0, 0, 0, 0, 0, 0, 0];
+      if (v === 'wk') for (var k = 0; k < 5; k++) S.days[k] = 1;
+      if (v === 'all') S.days = [1, 1, 1, 1, 1, 1, 1];
+      S.na = false; S.status = 'idle'; paint();
+    }
+    else if (a === 'submit') submit();
+    else if (a === 'reload') load();
+  });
+  app.addEventListener('input', function (e) { if (e.target.id === 'note') { S.note = e.target.value.slice(0, 200); } });
+  app.addEventListener('change', function (e) {
+    if (e.target.id === 'na') { S.na = e.target.checked; S.status = 'idle'; paint(); }
+  });
+
+  load();
+})();
+</script>
+</body>
+</html>
