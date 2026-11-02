@@ -29,9 +29,18 @@ button{cursor:pointer}
 h1{font-size:22px;line-height:1.2;margin:0}
 .wk{font-size:14px;color:var(--mut);white-space:nowrap}
 .lbl{font-size:14px;font-weight:600;color:var(--mut);margin:0 0 8px}
-.seg{display:flex;gap:6px;margin-bottom:18px}
-.seg button{flex:1;height:48px;border-radius:12px;border:1px solid var(--line);background:var(--sf);font-weight:600}
-.seg button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.seg{display:flex;gap:10px;margin-bottom:6px}
+.seg button{flex:1;height:56px;border-radius:12px;border:2px solid var(--line);background:var(--sf);
+  font-weight:700;font-size:17px;color:var(--mut);display:flex;align-items:center;justify-content:center;gap:8px}
+.seg button .tick{width:20px;height:20px;border-radius:50%;border:2px solid var(--line);flex:none;
+  display:grid;place-items:center;font-size:12px;line-height:1;color:transparent}
+.seg button[aria-pressed="true"]{background:var(--ok-bg);border-color:var(--ok);color:var(--ok)}
+.seg button[aria-pressed="true"] .tick{background:var(--ok);border-color:var(--ok);color:#fff}
+.seg.need button{border-color:var(--no);border-style:dashed}
+.tzhint{font-size:13px;color:var(--mut);margin:0 0 18px}
+.tzhint.need{color:var(--no);font-weight:600}
+.carry{background:var(--ok-bg);color:var(--ok);border-radius:10px;padding:8px 12px;font-size:13px;
+  font-weight:600;margin:0 0 10px}
 .days{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px;margin-bottom:10px}
 .days button{height:64px;border-radius:12px;border:1px solid var(--line);background:var(--sf);color:var(--mut);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-weight:700;font-size:17px}
 .days button small{font-size:12px;font-weight:500}
@@ -71,7 +80,7 @@ textarea#note{width:100%;box-sizing:border-box;resize:none;margin-bottom:14px;pa
 
   /* Set these two values once, after the Apps Script web app is deployed. */
   var CONFIG = {
-    API_URL: '',          // Apps Script web app URL ending in /exec. While empty, the page runs in demo mode and saves nothing.
+    API_URL: 'https://script.google.com/macros/s/AKfycbzEPPRvxH_RDJ2NN5fl-kIjk7TaGy_RVOoXdDNq3JMOQT-UCIQpwrwpgB7x4M3G4yDs/exec',
     BACKUP_FORM_URL: ''   // Optional Google Form link shown if the page cannot save.
   };
 
@@ -82,7 +91,7 @@ textarea#note{width:100%;box-sizing:border-box;resize:none;margin-bottom:14px;pa
   var params = new URLSearchParams(location.search);
   var token = params.get('t') || '';
   var demo = !CONFIG.API_URL;
-  var S = { p: null, tz: 'IST', days: [0, 0, 0, 0, 0, 0, 0], na: false, note: '', status: 'idle' };
+  var S = { p: null, tz: null, days: [0, 0, 0, 0, 0, 0, 0], na: false, note: '', status: 'idle' };
 
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   function istMonday() {
@@ -122,7 +131,7 @@ textarea#note{width:100%;box-sizing:border-box;resize:none;margin-bottom:14px;pa
   function load() {
     screen('Loading your page…', '', 'spin');
     if (demo) {
-      fake({ ok: true, name: 'Aarav Sharma', tz: 'IST', days: [1, 1, 1, 1, 1, 0, 0], open: true }, 300).then(start);
+      fake({ ok: true, name: 'Aarav Sharma', tz: '', answered: false, days: [1, 1, 1, 1, 1, 0, 0], open: true }, 300).then(start);
       return;
     }
     if (!token) { screen('This link is incomplete', 'Open the button in your email again. If it still does not work, ask your PQL for a new link.'); return; }
@@ -135,9 +144,10 @@ textarea#note{width:100%;box-sizing:border-box;resize:none;margin-bottom:14px;pa
   }
 
   function start(p) {
-    S.p = p; S.tz = p.tz === 'PST' ? 'PST' : 'IST'; S.na = !!p.na; S.note = String(p.note || '').slice(0, 200);
+    S.p = p; S.tz = (p.tz === 'PST' || p.tz === 'IST') ? p.tz : null; S.na = !!p.na; S.note = String(p.note || '').slice(0, 200);
     S.days = (p.days || []).slice(0, 7).map(function (v) { return v === 1 ? 1 : 0; });
     while (S.days.length < 7) S.days.push(0);
+    S.carried = !p.answered && S.days.some(function (v) { return v === 1; });
     S.status = 'idle';
     if (p.open === false) { screen('This week is closed', 'Next week’s request arrives on Monday.'); return; }
     build();
@@ -151,8 +161,10 @@ textarea#note{width:100%;box-sizing:border-box;resize:none;margin-bottom:14px;pa
     }
     app.innerHTML = (demo ? '<div class="demo">Demo mode. Nothing you tap here is saved.</div>' : '') +
       '<div class="card"><div class="top"><h1>Hi ' + first + '</h1><span class="wk">' + weekLabel() + '</span></div>' +
-      '<p class="lbl" id="tzl">Working timezone</p><div class="seg" role="group" aria-labelledby="tzl">' +
-      '<button type="button" data-a="tz" data-v="IST" aria-pressed="false">IST</button><button type="button" data-a="tz" data-v="PST" aria-pressed="false">PST</button></div>' +
+      '<p class="lbl" id="tzl">Working timezone</p><div class="seg" id="tzseg" role="group" aria-labelledby="tzl">' +
+      '<button type="button" data-a="tz" data-v="IST" aria-pressed="false"><span class="tick">\u2713</span>IST</button><button type="button" data-a="tz" data-v="PST" aria-pressed="false"><span class="tick">\u2713</span>PST</button></div>' +
+      '<p class="tzhint" id="tzhint"></p>' +
+      (S.carried ? '<p class="carry">Last week\u2019s days are filled in. Change them if this week is different.</p>' : '') +
       '<p class="lbl" id="dyl">Days you are available</p><div class="days" role="group" aria-labelledby="dyl">' + days + '</div>' +
       '<div class="quick"><button type="button" data-a="q" data-v="wk">Weekdays</button><button type="button" data-a="q" data-v="all">All days</button><button type="button" data-a="q" data-v="none">Clear</button></div>' +
       '<label class="na"><input type="checkbox" id="na"> Not available this week</label>' +
@@ -170,7 +182,16 @@ textarea#note{width:100%;box-sizing:border-box;resize:none;margin-bottom:14px;pa
       btns[i].disabled = S.na;
     }
     var tz = app.querySelectorAll('[data-a="tz"]');
-    for (var j = 0; j < tz.length; j++) tz[j].setAttribute('aria-pressed', String(tz[j].dataset.v === S.tz));
+    for (var j = 0; j < tz.length; j++) tz[j].setAttribute('aria-pressed', String(S.tz !== null && tz[j].dataset.v === S.tz));
+    var seg = document.getElementById('tzseg'), hint = document.getElementById('tzhint');
+    if (seg && hint) {
+      var missing = S.tz === null;
+      seg.className = 'seg' + (missing && S.status === 'invalidTz' ? ' need' : '');
+      hint.className = 'tzhint' + (missing && S.status === 'invalidTz' ? ' need' : '');
+      hint.textContent = missing
+        ? (S.status === 'invalidTz' ? 'Pick the timezone you work in before submitting.' : 'Tap the timezone you work in.')
+        : 'You work in ' + S.tz + '. Tap the other one to change it.';
+    }
     var na = document.getElementById('na'); if (na) na.checked = S.na;
     var go = document.getElementById('go'), msg = document.getElementById('msg'), h = '';
     if (!go) return;
@@ -178,6 +199,7 @@ textarea#note{width:100%;box-sizing:border-box;resize:none;margin-bottom:14px;pa
     go.textContent = S.status === 'saving' ? 'Saving…' : (S.status === 'saved' ? 'Update availability' : 'Submit availability');
     if (S.status === 'saving') h = '<div class="note ld">Saving your answers…</div>';
     else if (S.status === 'invalid') h = '<div class="note er" role="alert">Select at least one day, or tick Not available this week.</div>';
+    else if (S.status === 'invalidTz') h = '<div class="note er" role="alert">Pick your working timezone, IST or PST.</div>';
     else if (S.status === 'saved') {
       var names = [];
       S.days.forEach(function (v, k) { if (v) names.push(DN[k].slice(0, 3)); });
@@ -193,6 +215,7 @@ textarea#note{width:100%;box-sizing:border-box;resize:none;margin-bottom:14px;pa
 
   function submit() {
     if (S.status === 'saving') return;
+    if (S.tz === null) { S.status = 'invalidTz'; paint(); return; }
     if (!S.na && count() === 0) { S.status = 'invalid'; paint(); return; }
     S.status = 'saving'; paint();
     var payload = { action: 'submit', t: token, tz: S.tz, note: S.note, days: S.na ? [0, 0, 0, 0, 0, 0, 0] : S.days, na: S.na };
